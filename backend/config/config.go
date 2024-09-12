@@ -32,7 +32,7 @@ func (c *Config) WithSchema(schema string) *Config {
 }
 
 func (c *Config) Dsn() string {
-	return fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=enable",
+	return fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=allow",
 		c.DbUsername, c.DbPassword, c.DbHost, c.DbPort, c.DbName)
 }
 
