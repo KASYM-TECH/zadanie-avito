@@ -29,6 +29,8 @@ func NewAssembler(logger log.Logger) *Assembler {
 }
 
 func (a *Assembler) Assemble(ctx context.Context, conf *config.Config) (http.Handler, error) {
+	a.logger.Info(ctx, conf.Dsn())
+
 	cli, err := db.Open(ctx, conf.Dsn())
 	if err != nil {
 		a.logger.Fatal(ctx, err.Error())
