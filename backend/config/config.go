@@ -32,8 +32,8 @@ func (c *Config) WithSchema(schema string) *Config {
 }
 
 func (c *Config) Dsn() string {
-	return fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=%s",
-		c.DbUsername, c.DbPassword, c.DbHost, c.DbPort, c.DbName, c.DbSSL)
+	return fmt.Sprintf("user=%s password=%s host=%s port=%s dbname=%s sslmode=disable",
+		c.DbUsername, c.DbPassword, c.DbHost, c.DbPort, c.DbName)
 }
 
 func LoadFromEnv(envFilePath string) *Config {
