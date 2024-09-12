@@ -98,7 +98,7 @@ func (s BidService) SetStatus(ctx context.Context, bidId, userId, status string)
 		return nil, domain.ErrNotBidAuthor
 	}
 
-	if status == string(model.BidStatusApproved) {
+	if status == string(model.BidStatusApproved) || status == string(model.BidStatusRejected) {
 		return nil, domain.ErrForbiddenApproval
 	}
 
@@ -138,7 +138,7 @@ func (s BidService) Edit(ctx context.Context, userId string, bid *model.Bid) (*m
 }
 
 func (s BidService) SubmitDecision(ctx context.Context, userId, bidId string, decision model.Decision) (*model.Bid, error) {
-	orgId, err := s.bidRep.GetOrgIdByBidId(ctx, userId)
+	orgId, err := s.bidRep.GetOrgIdByBidId(ctx, bidId)
 	if err != nil {
 		return nil, err
 	}

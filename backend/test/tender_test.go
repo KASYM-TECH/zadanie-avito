@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestTender(t *testing.T) {
+func TestTenderCreate(t *testing.T) {
 	t.Parallel()
 	test := basic.InitTest(t)
 
@@ -107,7 +107,7 @@ func TestTenderEdit(t *testing.T) {
 	test.Assertions.Equal(editTenderResp.ServiceType, editReq.ServiceType)
 
 	aliceOrg := basic.CreateOrgEmployee(test, "Alice")
-	editTenderResp, myResp = basic.EditTender(test, aliceOrg.Token, tender.Id, aliceOrg.Username, editReq)
+	_, myResp = basic.EditTender(test, aliceOrg.Token, tender.Id, aliceOrg.Username, editReq)
 	test.Assertions.Equal(http.StatusForbidden, myResp.StatusCode())
 }
 
@@ -150,6 +150,6 @@ func TestTenderRollback(t *testing.T) {
 	test.Assertions.Equal(tenderReq.ServiceType, rollbackResp.ServiceType)
 
 	aliceOrg := basic.CreateOrgEmployee(test, "Alice")
-	rollbackResp, resp = basic.RollbackTender(test, aliceOrg.Token, tender.Id, aliceOrg.Username, "1")
+	_, resp = basic.RollbackTender(test, aliceOrg.Token, tender.Id, aliceOrg.Username, "1")
 	test.Assertions.Equal(http.StatusForbidden, resp.StatusCode())
 }

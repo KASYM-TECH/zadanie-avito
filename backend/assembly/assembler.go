@@ -6,7 +6,6 @@ import (
 	"avito/db"
 	"avito/db/transaction"
 	"avito/log"
-	"avito/migrations"
 	"avito/repository"
 	"avito/repository/cache"
 	"avito/server"
@@ -51,7 +50,7 @@ func (a *Assembler) Assemble(ctx context.Context, conf *config.Config) (http.Han
 
 	a.closers = append(a.closers, cli.Close)
 
-	mgRunner := migrations.NewRunner(migrations.DialectPostgreSQL, conf.MigrationDir, a.logger)
+	mgRunner := db.NewRunner(db.DialectPostgreSQL, conf.MigrationDir, a.logger)
 	err = mgRunner.Run(ctx, cli.DB.DB)
 	if err != nil {
 		a.logger.Fatal(ctx, err.Error())

@@ -224,7 +224,7 @@ func (rep *TenderRep) AuthorByTenderId(ctx context.Context, tenderId string) (st
 
 	var authorUsername string
 	err := rep.cli.SelectRow(ctx, &authorUsername,
-		`SELECT e.username FROM tender t JOIN employee e ON e.id = t.user_id WHERE id = $1`, tenderId)
+		`SELECT e.username FROM tender t JOIN employee e ON e.id = t.user_id WHERE t.id = $1`, tenderId)
 
 	if err != nil {
 		return "", errors.WithMessage(err, "Repository.Tender.AuthorByTenderId with id: "+tenderId)

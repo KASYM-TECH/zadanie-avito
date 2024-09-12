@@ -267,6 +267,7 @@ func (b *BidController) SetStatus(ctx context.Context, rd domain.RequestData) (*
 
 func (b *BidController) Edit(ctx context.Context, req domain.EditBidReq, rd domain.RequestData) (*domain.EditBidResp, *domain.HTTPError) {
 	bidId, ok := mux.Vars(rd.Request)["bidId"]
+	ctx = log.AddKeyVal(ctx, "bid_name", req.Name)
 	b.log.Info(ctx, "bid Edit handler")
 
 	if !ok || len(bidId) == 0 {
@@ -309,14 +310,15 @@ func (b *BidController) Edit(ctx context.Context, req domain.EditBidReq, rd doma
 	case errors.Is(err, domain.ErrBidDoesNotExist):
 		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrNotBidAuthor):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the author to edit", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the author to edit", Status: domain.ForbiddenCode}
 	default:
 		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
 	}
 }
 
-func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestData) (*domain.SubmitDesBidResp, *domain.HTTPError) {
+func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestData) (*domain.SubmitDecisionBidResp, *domain.HTTPError) {
 	bidId, _ := mux.Vars(rd.Request)["bidId"]
+	ctx = log.AddKeyVal(ctx, "bid_id", bidId)
 	b.log.Info(ctx, "bid SubmitDecision handler")
 
 	var (
@@ -346,7 +348,7 @@ func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestDat
 
 	bid, err := b.bidService.SubmitDecision(ctx, rd.UserId, bidId, decision)
 	if err == nil {
-		bidDom := &domain.SubmitDesBidResp{
+		bidDom := &domain.SubmitDecisionBidResp{
 			Id:         bid.ID,
 			Name:       bid.Name,
 			Status:     bid.Status,
@@ -366,7 +368,8 @@ func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestDat
 	case errors.Is(err, domain.ErrTenderIsNotPublished):
 		return nil, &domain.HTTPError{Cause: err, Reason: "Tender is not published", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrUserNotResponsible):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be from tender's organization to submit decision", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "You must be from tender's organization to submit decision",
+			Status: domain.ForbiddenCode}
 	default:
 		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
 	}
@@ -374,6 +377,7 @@ func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestDat
 
 func (b *BidController) SubmitFeedback(ctx context.Context, rd domain.RequestData) (*domain.FeedbackBidResp, *domain.HTTPError) {
 	bidId, ok := mux.Vars(rd.Request)["bidId"]
+	ctx = log.AddKeyVal(ctx, "bid_id", bidId)
 	b.log.Info(ctx, "bid Feedback handler")
 
 	if !ok || len(bidId) == 0 {
@@ -476,7 +480,7 @@ func (b *BidController) Rollback(ctx context.Context, rd domain.RequestData) (*d
 	case errors.Is(err, domain.ErrBidDoesNotExist):
 		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrNotBidAuthor):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the bid author to roll it back", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the bid author to roll it back", Status: domain.ForbiddenCode}
 	default:
 		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
 	}
@@ -534,9 +538,9 @@ func (b *BidController) Reviews(ctx context.Context, rd domain.RequestData) ([]d
 	case errors.Is(err, domain.ErrBidDoesNotExist):
 		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrAuthorIsIncorrect):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Specified author is not author of the tender", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "Specified author is not the author of the tender", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrUserNotResponsible):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You are not responsible for tender organization", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "You are not responsible for tender organization", Status: domain.ForbiddenCode}
 	default:
 		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
 	}

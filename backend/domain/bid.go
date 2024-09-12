@@ -58,7 +58,7 @@ type EditBidResp struct {
 	CreatedAt  time.Time           `json:"createdAt"`
 }
 
-type SubmitDesBidResp struct {
+type SubmitDecisionBidResp struct {
 	Id         string              `json:"id"`
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`

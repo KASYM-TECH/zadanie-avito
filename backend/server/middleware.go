@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 )
 
 type Middleware struct {
@@ -69,7 +70,10 @@ func (md *Middleware) HandleLogging(handler http.HandlerFunc) http.HandlerFunc {
 
 func (md *Middleware) HandleAuth(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		claims, err := jwt.ParseToken(r.Header.Get("Authorization"))
+		token := strings.TrimSpace(r.Header.Get("Authorization"))
+		token, _ = strings.CutPrefix(token, "bearer ")
+
+		claims, err := jwt.ParseToken(token)
 		if err != nil {
 			domErr := domain.NewHTTPError(err, "could not authenticate: "+err.Error(), domain.UnauthorizedCode)
 			domain.SetError(r, domErr)

@@ -103,10 +103,6 @@ func (rep *BidRep) GetByUserId(ctx context.Context, offset, limit int, userId st
 }
 
 func (rep *BidRep) GetByTenderId(ctx context.Context, offset, limit int, tenderId string) ([]model.Bid, error) {
-	if !rep.idsCache.Exists(tenderId) {
-		return nil, domain.ErrBidDoesNotExist
-	}
-
 	query := `SELECT b.id,
 			c.name,
 			b.status,
@@ -178,7 +174,7 @@ func (rep *BidRep) UpdateById(ctx context.Context, bid *model.Bid) error {
 	_, err := rep.cli.Exec(ctx,
 		`WITH version_t AS (
 					INSERT INTO bid_content(name, description, version, bid_id) 
-					VALUES($1, $2, (SELECT MAX(version) FROM bid_content WHERE bid_id = $3)+1, $3) RETURNING version),
+					VALUES($1, $2, (SELECT MAX(version) FROM bid_content WHERE bid_id = $3)+1, $3) RETURNING version)
 			UPDATE bid SET version=(SELECT version FROM version_t) WHERE id = $3`,
 		bid.Name, bid.Description, bid.ID)
 
@@ -270,7 +266,7 @@ func (rep *BidRep) GetOrgIdByBidId(ctx context.Context, bidId string) (string, e
 
 	var orgId string
 	err := rep.cli.SelectRow(ctx, &orgId, `SELECT t.organization_id FROM bid b
-            										JOIN tender t ON t.id = b.tender_id WHERE id = $1`, bidId)
+            										JOIN tender t ON t.id = b.tender_id WHERE b.id = $1`, bidId)
 
 	if err != nil {
 		return "", errors.WithMessage(err, "Repository.Bid.UpdateById with id: "+bidId)

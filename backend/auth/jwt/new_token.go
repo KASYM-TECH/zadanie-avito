@@ -35,5 +35,5 @@ func NewToken(userID, username, tokenId string, expiration time.Duration) (strin
 		return "", false
 	}
 
-	return tokenString, true
+	return "bearer " + tokenString, true
 }
