@@ -12,14 +12,21 @@ CREATE TYPE tender_status AS ENUM (
 );
 
 CREATE TABLE IF NOT EXISTS tender (
-    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status tender_status NOT NULL,
+    organization_id UUID NOT NULL REFERENCES organization(id),
+    version INTEGER CHECK (version >= 1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' + INTERVAL '3 hours'),
+    user_id UUID NOT NULL REFERENCES employee(id)
+);
+
+CREATE TABLE IF NOT EXISTS tender_content (
+    tender_id UUID REFERENCES tender(id),
+    version INTEGER CHECK (version >= 1) NOT NULL DEFAULT 1,
     name TEXT NOT NULL CHECK (char_length(name) <= 100),
     description TEXT NOT NULL CHECK (char_length(name) <= 500),
     service_type tender_service_type NOT NULL,
-    status tender_status NOT NULL,
-    organization_id BIGINT NOT NULL REFERENCES organization(id),
-    version INTEGER CHECK (version >= 1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT NOW()
+    PRIMARY KEY(tender_id, version)
 );
 
 -- +goose Down

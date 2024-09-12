@@ -1,4 +1,4 @@
-package tests
+package basic
 
 import (
 	"avito/assembly"
@@ -7,6 +7,7 @@ import (
 	"avito/log"
 	"context"
 	"github.com/stretchr/testify/require"
+	"github.com/txix-open/isp-kit/http/httpcli"
 	"math/rand"
 	"net/http/httptest"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 type Test struct {
 	Assertions *require.Assertions
 	Server     *httptest.Server
+	Cli        *httpcli.Client
 	DbCli      db.DB
 	TestID     uint32
 	URL        string
@@ -42,10 +44,8 @@ func InitTest(t *testing.T) *Test {
 	dbCli, err := db.Open(ctx, cfg.Dsn())
 	assert.NoError(err)
 
-	err = dbCli.CreateSchema(cfg.DbSchema)
-	assert.NoError(err)
-
 	t.Cleanup(func() {
+		_ = dbCli.DropSchema(cfg.DbSchema)
 		srv.Close()
 		err := dbCli.Close()
 		assert.NoError(err)
@@ -56,17 +56,11 @@ func InitTest(t *testing.T) *Test {
 		Server:     srv,
 		DbCli:      dbCli,
 		TestID:     rand.Uint32(),
+		URL:        srv.URL,
+		Cli:        httpcli.New(),
 	}
 }
 
 func ConfigDefault() *config.Config {
-	return &config.Config{
-		DbUsername: "postgres",
-		DbPassword: "postgres",
-		DbHost:     "localhost",
-		DbPort:     "5432",
-		DbName:     "avitotest",
-		DbSSL:      "disable",
-		AppMode:    "dev",
-	}
+	return config.LoadFromEnv("test.env")
 }

@@ -6,5 +6,5 @@ import (
 
 type Claims struct {
 	jwt.StandardClaims
-	RoleId int
+	Username string
 }

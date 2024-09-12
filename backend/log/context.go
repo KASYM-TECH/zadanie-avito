@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals,forcetypeassert
 package log
 
 import (

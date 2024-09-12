@@ -1,3 +1,4 @@
+//nolint:gomnd, mnd
 package server
 
 import (
@@ -8,7 +9,6 @@ import (
 	"avito/utils"
 	"context"
 	"fmt"
-	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"reflect"
 )
@@ -26,21 +26,21 @@ func NewMiddleware(logger log.Logger) *Middleware {
 	}
 }
 
-func (md *Middleware) Wrap(endpointFunc any) httprouter.Handle {
+func (md *Middleware) Wrap(endpointFunc any) http.HandlerFunc {
 	return md.HandleResponse(md.HandleLogging(md.HandleCalling(endpointFunc)))
 }
 
-func (md *Middleware) WrapAuthed(endpointFunc any) httprouter.Handle {
+func (md *Middleware) WrapAuthed(endpointFunc any) http.HandlerFunc {
 	return md.HandleResponse(md.HandleLogging(md.HandleAuth(md.HandleCalling(endpointFunc))))
 }
 
-func (md *Middleware) HandleResponse(handler httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-		handler(w, r, params)
+func (md *Middleware) HandleResponse(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler(w, r)
 		err := domain.GetError(r)
 		if err != nil {
 			w.WriteHeader(int(err.Status))
-			w.Write([]byte(err.String()))
+			_, _ = w.Write([]byte(err.String()))
 			return
 		}
 		w.WriteHeader(int(domain.SuccessCode))
@@ -55,20 +55,20 @@ func (md *Middleware) HandleResponse(handler httprouter.Handle) httprouter.Handl
 	}
 }
 
-func (md *Middleware) HandleLogging(handler httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-		handler(w, r, params)
+func (md *Middleware) HandleLogging(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler(w, r)
 		err := domain.GetError(r)
 		if err == nil {
 			return
 		}
-		warnMsg := fmt.Sprintf("\n%s \nMethod: %s URL: %s ", err.String(), r.Method, r.URL)
+		warnMsg := fmt.Sprintf("\n%s \n[Method] %s URL: %s ", err.String(), r.Method, r.URL)
 		md.logger.Warn(r.Context(), warnMsg)
 	}
 }
 
-func (md *Middleware) HandleAuth(handler httprouter.Handle) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (md *Middleware) HandleAuth(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		claims, err := jwt.ParseToken(r.Header.Get("Authorization"))
 		if err != nil {
 			domErr := domain.NewHTTPError(err, "could not authenticate: "+err.Error(), domain.UnauthorizedCode)
@@ -79,12 +79,12 @@ func (md *Middleware) HandleAuth(handler httprouter.Handle) httprouter.Handle {
 		claimsCtx := context.WithValue(r.Context(), AuthKey{}, *claims)
 		*r = *r.WithContext(claimsCtx)
 
-		handler(w, r, params)
+		handler(w, r)
 	}
 }
 
-func (md *Middleware) HandleCalling(endpointFunc any) httprouter.Handle {
-	return func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (md *Middleware) HandleCalling(endpointFunc any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		var (
 			argsIn  []reflect.Value
 			argsOut []reflect.Value
@@ -123,9 +123,13 @@ func (md *Middleware) HandleCalling(endpointFunc any) httprouter.Handle {
 			argsIn = append(argsIn, reflect.ValueOf(secondParam).Elem())
 		}
 
-		requestData := domain.RequestData{Params: params}
+		requestData := domain.RequestData{Request: r}
 		if claims := r.Context().Value(AuthKey{}); claims != nil {
-			requestData.Claims = claims.(auth.Claims)
+			var ok bool
+			if requestData.Claims, ok = claims.(auth.Claims); !ok {
+				return
+			}
+			requestData.UserId = requestData.Claims.Subject
 		}
 		argsIn = append(argsIn, reflect.ValueOf(requestData))
 
@@ -136,7 +140,10 @@ func (md *Middleware) HandleCalling(endpointFunc any) httprouter.Handle {
 
 		if !outErr.IsNil() && outErr.Kind() == reflect.Pointer {
 			outErr = outErr.Elem()
-			httpError := outErr.Interface().(domain.HTTPError)
+			httpError, ok := outErr.Interface().(domain.HTTPError)
+			if !ok {
+				return
+			}
 			domain.SetError(r, httpError)
 		}
 

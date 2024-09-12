@@ -1,8 +1,11 @@
+//nolint:gochecknoglobals
 package log
 
 import (
 	"context"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"os"
 )
 
 type Logger interface {
@@ -20,43 +23,63 @@ var (
 	ProdAppMode AppMode = "prod"
 )
 
-type logger struct {
+type SugaredLogger struct {
 	zap *zap.SugaredLogger
 }
 
-func NewLogger(appMode string) Logger {
-	l, err := zap.NewProduction()
-	if appMode == string(DevAppMode) {
-		l, err = zap.NewDevelopment()
-	}
-	if err != nil {
-		panic(err)
+func NewLogger(appMode string) *SugaredLogger {
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:       "time",
+		LevelKey:      "level",
+		CallerKey:     "caller",
+		MessageKey:    "msg",
+		StacktraceKey: "",
+		EncodeLevel:   zapcore.CapitalLevelEncoder,
+		EncodeTime:    zapcore.ISO8601TimeEncoder,
+		EncodeCaller:  zapcore.ShortCallerEncoder,
 	}
 
-	return &logger{l.Sugar()}
+	var zapCore zapcore.Core
+	if appMode == "dev" {
+		zapCore = zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			zapcore.AddSync(zapcore.Lock(os.Stdout)),
+			zapcore.DebugLevel,
+		)
+	} else {
+		zapCore = zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			zapcore.AddSync(zapcore.Lock(os.Stdout)),
+			zapcore.InfoLevel,
+		)
+	}
+
+	zapLog := zap.New(zapCore)
+
+	return &SugaredLogger{zapLog.Sugar()}
 }
 
-func (logger *logger) Debug(ctx context.Context, msg string) {
+func (logger *SugaredLogger) Debug(ctx context.Context, msg string) {
 	logger.zap.Log(zap.DebugLevel, msg, GetFields(ctx).String())
 	_ = logger.zap.Sync()
 }
 
-func (logger *logger) Info(ctx context.Context, msg string) {
+func (logger *SugaredLogger) Info(ctx context.Context, msg string) {
 	logger.zap.Log(zap.InfoLevel, msg, GetFields(ctx).String())
 	_ = logger.zap.Sync()
 }
 
-func (logger *logger) Error(ctx context.Context, msg string) {
+func (logger *SugaredLogger) Error(ctx context.Context, msg string) {
 	logger.zap.Log(zap.ErrorLevel, msg, GetFields(ctx).String())
 	_ = logger.zap.Sync()
 }
 
-func (logger *logger) Fatal(ctx context.Context, msg string) {
+func (logger *SugaredLogger) Fatal(ctx context.Context, msg string) {
 	logger.zap.Log(zap.FatalLevel, msg, GetFields(ctx).String())
 	_ = logger.zap.Sync()
 }
 
-func (logger *logger) Warn(ctx context.Context, msg string) {
+func (logger *SugaredLogger) Warn(ctx context.Context, msg string) {
 	logger.zap.Log(zap.WarnLevel, msg, GetFields(ctx).String())
 	_ = logger.zap.Sync()
 }

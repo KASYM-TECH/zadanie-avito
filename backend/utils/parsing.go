@@ -1,6 +1,8 @@
+//nolint:gochecknoglobals,errorlint,fatcontext,forcetypeassert
 package utils
 
 import (
+	"avito/domain"
 	"avito/log"
 	"context"
 	"encoding/json"
@@ -37,7 +39,7 @@ func Validate(ctx context.Context, obj any) (context.Context, error) {
 			ctx = log.AddField(ctx, log.Field{Name: "Param", Value: err.Param()})
 			ctx = log.AddField(ctx, log.Field{Name: "Value", Value: err.Value()})
 		}
-		return ctx, fmt.Errorf("invalid of type: %T", obj)
+		return ctx, domain.ErrJsonParse
 	}
 	return ctx, nil
 }

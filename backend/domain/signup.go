@@ -1,7 +1,7 @@
 package domain
 
 type SignupRequest struct {
-	Login    string `validate:"required" body:"login"`
-	RoleId   int    `validate:"required" body:"role_id"`
-	Password string `validate:"required,gte=5" body:"password"`
+	Username  string `validate:"required,lte=100" json:"username"`
+	FirstName string `validate:"required,lte=100" json:"firstname"`
+	LastName  string `validate:"required,lte=100" json:"lastname"`
 }

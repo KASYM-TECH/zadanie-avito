@@ -12,7 +12,7 @@ import (
 )
 
 func run() error {
-	cfg := config.LoadFromEnv()
+	cfg := config.LoadFromEnv("dev.env")
 	ctx := context.Background()
 	if _, err := cfg.Validate(ctx); err != nil {
 		return err
@@ -37,7 +37,7 @@ func run() error {
 		return err
 	}
 
-	if err = http.ListenAndServe(":3453", router); err != nil {
+	if err = http.ListenAndServe(cfg.ServerAddress, router); err != nil {
 		return err
 	}
 
@@ -47,6 +47,6 @@ func run() error {
 func main() {
 	err := run()
 	if err != nil {
-		println(err.Error())
+		os.Exit(1)
 	}
 }

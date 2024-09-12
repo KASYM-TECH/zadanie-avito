@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals
 package db
 
 import (
@@ -16,6 +17,10 @@ type DB interface {
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
 	ExecNamed(ctx context.Context, query string, arg any) (sql.Result, error)
 }
+
+var (
+	maxOpenConn = 100
+)
 
 type Client struct {
 	*sqlx.DB
@@ -38,7 +43,7 @@ func Open(ctx context.Context, dsn string) (*Client, error) {
 	}
 
 	db.DB = pgDb
-	db.DB.SetMaxOpenConns(100)
+	db.DB.SetMaxOpenConns(maxOpenConn)
 
 	return db, nil
 }
@@ -46,7 +51,23 @@ func Open(ctx context.Context, dsn string) (*Client, error) {
 func (db *Client) CreateSchema(schema string) error {
 	_, err := db.DB.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", schema))
 	if err != nil {
-		return errors.WithMessage(err, "exec query")
+		return errors.WithMessage(err, "schema create")
+	}
+	return nil
+}
+
+func (db *Client) SwitchSchema(schema string) error {
+	_, err := db.DB.Exec(fmt.Sprintf("SET search_path TO %s", schema))
+	if err != nil {
+		return errors.WithMessage(err, "set search_path")
+	}
+	return nil
+}
+
+func (db *Client) DropSchema(schema string) error {
+	_, err := db.DB.Exec(fmt.Sprintf("DROP SCHEMA %s CASCADE", schema))
+	if err != nil {
+		return errors.WithMessage(err, "schema drop")
 	}
 	return nil
 }
@@ -65,4 +86,37 @@ func (db *Client) Exec(ctx context.Context, query string, args ...any) (sql.Resu
 
 func (db *Client) ExecNamed(ctx context.Context, query string, arg any) (sql.Result, error) {
 	return db.NamedExecContext(ctx, query, arg)
+}
+
+func (db *Client) RunInTransaction(ctx context.Context, txFunc TxFunc, opts ...TxOption) (err error) {
+	options := &txOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	tx, err := db.BeginTxx(ctx, options.nativeOpts)
+	if err != nil {
+		return errors.WithMessage(err, "begin transaction")
+	}
+	defer func() {
+		p := recover()
+		if p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+
+		if err != nil {
+			rbErr := tx.Rollback()
+			if rbErr != nil {
+				err = errors.WithMessage(err, rbErr.Error())
+			}
+			return
+		}
+
+		err = tx.Commit()
+		if err != nil {
+			err = errors.WithMessage(err, "commit tx")
+		}
+	}()
+
+	return txFunc(ctx, &Tx{tx})
 }

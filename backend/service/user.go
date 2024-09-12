@@ -1,7 +1,6 @@
 package service
 
 import (
-	"avito/auth"
 	"avito/auth/jwt"
 	"avito/db/model"
 	"avito/domain"
@@ -10,53 +9,41 @@ import (
 )
 
 type UserRep interface {
-	Insert(ctx context.Context, login, hashedPassword string, roleId int) (string, error)
-	GetUserByLogin(ctx context.Context, login string) (*model.User, error)
+	Insert(ctx context.Context, employee model.Employee) (string, error)
+	GetIdByUsername(ctx context.Context, username string) (string, error)
 }
 
 type UserService struct {
-	UserRep UserRep
+	userRep UserRep
 }
 
 func NewUserService(userRep UserRep) UserService {
-	return UserService{UserRep: userRep}
+	return UserService{userRep: userRep}
 }
 
-func (u UserService) Signup(ctx context.Context, login, password string) (string, error) {
-	hashedPwd := auth.GenerateHashedPassword(password)
-	if hashedPwd == "" {
-		return "", errors.WithMessage(domain.BusinessErr, "hashing password failed")
-	}
-
-	id, err := u.UserRep.Insert(ctx, login, hashedPwd, 1)
+func (u UserService) Signup(ctx context.Context, employee model.Employee) (string, error) {
+	id, err := u.userRep.Insert(ctx, employee)
 	if err != nil {
-		return "", errors.WithMessage(err, "insert user")
+		return "", errors.WithMessage(err, "Service.Signup insert user")
 	}
 
 	return id, nil
 }
 
-func (u UserService) Login(ctx context.Context, username, password string) (string, string, error) {
-	user, err := u.UserRep.GetUserByLogin(ctx, username)
+func (u UserService) Login(ctx context.Context, username string) (string, string, error) {
+	userID, err := u.userRep.GetIdByUsername(ctx, username)
 	if err != nil {
-		return "", "", errors.WithMessage(domain.ClientErr, err.Error())
-	}
-	if user == nil {
-		return "", "", errors.WithMessage(domain.ClientErr, "could not find user")
+		return "", "", errors.WithMessage(err, "Service.Login could not fetch user from db")
 	}
 
-	if !auth.IsPasswordCorrect(user.HashedPassword, password) {
-		return "", "", errors.WithMessage(domain.ClientErr, "the password is not correct")
-	}
-
-	refreshToken, genErr := jwt.NewRefreshToken(user.Id, user.RoleID)
+	refreshToken, genErr := jwt.NewRefreshToken(userID, username)
 	if !genErr {
-		return "", "", errors.WithMessage(domain.ClientErr, "could not generate token")
+		return "", "", errors.WithMessage(domain.ErrInternal, "could not generate token")
 	}
 
-	accessToken, genErr := jwt.NewAccessToken(user.Id, user.RoleID)
+	accessToken, genErr := jwt.NewAccessToken(userID, username)
 	if !genErr {
-		return "", "", errors.WithMessage(domain.InternalErr, "could not generate token")
+		return "", "", errors.WithMessage(domain.ErrInternal, "could not generate token")
 	}
 
 	return refreshToken, accessToken, nil

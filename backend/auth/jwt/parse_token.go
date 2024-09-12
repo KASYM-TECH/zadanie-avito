@@ -6,7 +6,7 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-func ParseToken(tokenString string) (claims *auth.Claims, err error) {
+func ParseToken(tokenString string) (*auth.Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &auth.Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return config.JwtKey, nil
 	})

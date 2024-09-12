@@ -1,3 +1,4 @@
+//nolint:gochecknoglobals
 package domain
 
 import (
@@ -7,10 +8,22 @@ import (
 )
 
 var (
-	DbErr       = errors.New("Database error")
-	InternalErr = errors.New("Internal error")
-	BusinessErr = errors.New("Business error")
-	ClientErr   = errors.New("Client error")
+	ErrDb            = errors.New("Database error")
+	ErrInternal      = errors.New("Internal error")
+	ErrBusiness      = errors.New("Business error")
+	ErrClient        = errors.New("Client error")
+	ErrInvalidConfig = errors.New("Invalid config")
+	ErrJsonParse     = errors.New("Invalid json")
+
+	ErrUserNotResponsible   = errors.New("User not responsible for org")
+	ErrPublishedBidNotFound = errors.New("Published bid with this id does not exist")
+	ErrAuthorIsIncorrect    = errors.New("Specified author is not author of the tender")
+	ErrNotBidAuthor         = errors.New("You must be the author of the bid")
+	ErrBidIsNotPublished    = errors.New("Bid is not published")
+	ErrTenderIsNotPublished = errors.New("Tender is not published")
+	ErrForbiddenApproval    = errors.New("You do not have permission for self approval")
+	ErrBidDoesNotExist      = errors.New("Bid with this id does not exist")
+	ErrTenderDoesNotExist   = errors.New("Tender with this id does not exist")
 )
 
 type StatusCode int
@@ -18,14 +31,14 @@ type StatusCode int
 const (
 	SuccessCode       StatusCode = 200
 	BadRequestCode    StatusCode = 400
-	UnauthorizedCode  StatusCode = 501
-	ForbiddenCode     StatusCode = 503
+	UnauthorizedCode  StatusCode = 401
+	ForbiddenCode     StatusCode = 403
 	ServerFailureCode StatusCode = 500
 )
 
 type HTTPError struct {
 	Cause  error      `body:"-"`
-	Detail string     `body:"detail"`
+	Reason string     `body:"Reason"`
 	Status StatusCode `body:"-"`
 }
 
@@ -35,9 +48,9 @@ func NewHTTPError(err error, detail string, status StatusCode) HTTPError {
 
 func (e HTTPError) String() string {
 	if e.Cause == nil {
-		return e.Detail
+		return e.Reason
 	}
-	return "[Detail] " + e.Detail + "\n" + "[Cause] " + e.Cause.Error()
+	return "[Reason] " + e.Reason + "\n" + "[Cause] " + e.Cause.Error()
 }
 
 type ErrInContext struct{}

@@ -6,6 +6,16 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+type Transactional interface {
+	RunInTransaction(ctx context.Context, txFunc TxFunc, opts ...TxOption) error
+}
+
+type txOptions struct {
+	nativeOpts *sql.TxOptions
+}
+
+type TxOption func(options *txOptions)
+
 type TxFunc func(ctx context.Context, tx *Tx) error
 
 type Tx struct {
@@ -26,8 +36,4 @@ func (t *Tx) Exec(ctx context.Context, query string, args ...any) (sql.Result, e
 
 func (t *Tx) ExecNamed(ctx context.Context, query string, arg any) (sql.Result, error) {
 	return t.NamedExecContext(ctx, query, arg)
-}
-
-type Transactional interface {
-	RunInTransaction(ctx context.Context, txFunc TxFunc) error
 }
