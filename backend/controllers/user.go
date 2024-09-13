@@ -2,7 +2,6 @@
 package controllers
 
 import (
-	"avito/db/model"
 	"avito/domain"
 	"avito/log"
 	"context"
@@ -12,8 +11,7 @@ import (
 )
 
 type UserService interface {
-	Signup(ctx context.Context, employee model.Employee) (string, error)
-	Login(ctx context.Context, username string) (string, string, error)
+	Signup(ctx context.Context, signupRequest *domain.SignupRequest) (string, error)
 }
 
 type UserController struct {
@@ -29,10 +27,7 @@ func (u *UserController) Signup(ctx context.Context, signupRequest domain.Signup
 	ctx = log.AddKeyVal(ctx, "username", signupRequest.Username)
 	u.log.Info(ctx, "signup handler")
 
-	userId, err := u.userService.Signup(ctx, model.Employee{
-		Username:  signupRequest.Username,
-		LastName:  signupRequest.LastName,
-		FirstName: signupRequest.FirstName})
+	userId, err := u.userService.Signup(ctx, &signupRequest)
 
 	if err == nil {
 		return userId, nil
@@ -47,20 +42,4 @@ func (u *UserController) Signup(ctx context.Context, signupRequest domain.Signup
 	}
 
 	return "", &domain.HTTPError{Cause: err, Reason: "could not signup user", Status: domain.ServerFailureCode}
-}
-
-func (u *UserController) Login(ctx context.Context, loginRequest domain.LoginRequest, rd domain.RequestData) (*domain.LoginResponse, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "user_login", loginRequest.Username)
-	u.log.Info(ctx, "login handler")
-
-	refreshToken, accessToken, err := u.userService.Login(ctx, loginRequest.Username)
-	switch {
-	case errors.Is(err, domain.ErrClient):
-		return nil, &domain.HTTPError{Cause: err, Reason: "could not login user", Status: domain.BadRequestCode}
-	case errors.Is(err, domain.ErrInternal):
-		return nil, &domain.HTTPError{Cause: err, Reason: "could not login user", Status: domain.ServerFailureCode}
-
-	default:
-		return &domain.LoginResponse{AccessToken: accessToken, RefreshToken: refreshToken}, nil
-	}
 }

@@ -8,21 +8,25 @@ import (
 	"avito/repository/cache"
 	"context"
 	"fmt"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pkg/errors"
 	"strings"
 )
 
 type TenderRep struct {
-	cli      db.DB
-	logger   log.Logger
-	idsCache *cache.Set
+	cli                  db.DB
+	logger               log.Logger
+	idsCache             *cache.Set
+	usernameIdMatchCache *cache.Storage
 }
 
-func NewTenderRep(logger log.Logger, cli db.DB, idsCache *cache.Set) *TenderRep {
+func NewTenderRep(logger log.Logger, cli db.DB, idsCache *cache.Set, usernameIdMatchCache *cache.Storage) *TenderRep {
 	tenderRep := &TenderRep{
-		logger:   logger,
-		cli:      cli,
-		idsCache: idsCache,
+		logger:               logger,
+		cli:                  cli,
+		idsCache:             idsCache,
+		usernameIdMatchCache: usernameIdMatchCache,
 	}
 	ctx := context.Background()
 	ids, err := tenderRep.GetTenderIds(ctx)
@@ -34,14 +38,27 @@ func NewTenderRep(logger log.Logger, cli db.DB, idsCache *cache.Set) *TenderRep 
 	return tenderRep
 }
 
-func (rep *TenderRep) Insert(ctx context.Context, newTender *model.Tender) (string, error) {
+func (rep *TenderRep) Insert(ctx context.Context, newTender *model.Tender, username string) (string, error) {
+	userId, found := rep.usernameIdMatchCache.Get(username)
+	if !found {
+		return "", domain.ErrUserWithNameNotFound
+	}
+
 	var tenderId string
 	err := rep.cli.SelectRow(ctx, &tenderId,
 		`WITH tender_id_t AS (INSERT INTO tender (status, organization_id, user_id) VALUES ($1, $2, $3) RETURNING id)
 			   INSERT INTO tender_content(name, description, service_type, tender_id) VALUES ($4, $5, $6, 
 				(SELECT id FROM tender_id_t)) RETURNING (SELECT id FROM tender_id_t)`,
-		newTender.Status, newTender.OrganizationID, newTender.UserId,
+		newTender.Status, newTender.OrganizationId, userId,
 		newTender.Name, newTender.Description, newTender.ServiceType)
+
+	pgErr := &pgconn.PgError{}
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgerrcode.ForeignKeyViolation:
+			return "", domain.ErrOrganizationDoesNotExist
+		}
+	}
 
 	if err != nil {
 		return "", errors.WithMessage(err, "Repository.Tender.Insert with name: "+newTender.Name)
@@ -86,8 +103,11 @@ func (rep *TenderRep) GetPublished(ctx context.Context, offset, limit int, types
 }
 
 func (rep *TenderRep) GetByUsername(ctx context.Context, offset, limit int, username string) ([]model.Tender, error) {
+	userId, found := rep.usernameIdMatchCache.Get(username)
+	if !found {
+		return nil, domain.ErrUserWithNameNotFound
+	}
 	query := `
-			WITH user_id_t AS (SELECT id FROM employee WHERE username = $1)
 			SELECT t.id,
 				c.name,
 				c.description,
@@ -96,7 +116,7 @@ func (rep *TenderRep) GetByUsername(ctx context.Context, offset, limit int, user
 				t.version,
 				t.created_at
  			FROM tender t JOIN tender_content c ON t.id = c.tender_id and t.version = c.version
-            WHERE user_id = (SELECT id FROM user_id_t) ORDER BY name OFFSET $2`
+            WHERE user_id = $1 ORDER BY name OFFSET $2`
 
 	var (
 		tenders []model.Tender
@@ -109,13 +129,13 @@ func (rep *TenderRep) GetByUsername(ctx context.Context, offset, limit int, user
 
 	if limit > 0 {
 		query += ` LIMIT $3`
-		err = rep.cli.Select(ctx, &tenders, query, username, offset, limit)
+		err = rep.cli.Select(ctx, &tenders, query, userId, offset, limit)
 	} else {
-		err = rep.cli.Select(ctx, &tenders, query, username, offset)
+		err = rep.cli.Select(ctx, &tenders, query, userId, offset)
 	}
 
 	if err != nil {
-		return nil, errors.WithMessage(err, "Repository.Tender.GetByUserId")
+		return nil, errors.WithMessage(err, "Repository.Tender.GetByUsername")
 	}
 
 	return tenders, nil
@@ -162,7 +182,7 @@ func (rep *TenderRep) SetTenderStatusIfOpen(ctx context.Context, tenderId, statu
 }
 
 func (rep *TenderRep) UpdateById(ctx context.Context, tender *model.Tender) error {
-	if !rep.idsCache.Exists(tender.ID) {
+	if !rep.idsCache.Exists(tender.Id) {
 		return domain.ErrTenderDoesNotExist
 	}
 
@@ -171,10 +191,10 @@ func (rep *TenderRep) UpdateById(ctx context.Context, tender *model.Tender) erro
     		INSERT INTO tender_content(name, description, service_type, version, tender_id) 
     		VALUES($1, $2, $3, (SELECT MAX(version) FROM tender_content WHERE tender_id = $4)+1, $4) RETURNING version) 
 			UPDATE tender SET version=(SELECT version from version_table) WHERE id = $4`,
-		tender.Name, tender.Description, tender.ServiceType, tender.ID)
+		tender.Name, tender.Description, tender.ServiceType, tender.Id)
 
 	if err != nil {
-		return errors.WithMessage(err, "Repository.Tender.UpdateById with id: "+tender.ID)
+		return errors.WithMessage(err, "Repository.Tender.UpdateById with id: "+tender.Id)
 	}
 
 	return nil
@@ -234,35 +254,14 @@ func (rep *TenderRep) AuthorByTenderId(ctx context.Context, tenderId string) (st
 }
 
 func (rep *TenderRep) UsernameBelongsToTenderOrg(ctx context.Context, username, tenderId string) (bool, error) {
+	userId, found := rep.usernameIdMatchCache.Get(username)
+	if !found {
+		return false, domain.ErrUserWithNameNotFound
+	}
 	var belongs bool
 	err := rep.cli.SelectRow(ctx, &belongs,
 		`SELECT EXISTS (
-    WITH user_id_t AS (
-        SELECT id FROM employee WHERE username = $1
-    ),
-    organization_id_t AS (
-    	SELECT organization_id FROM tender WHERE id = $2
-    )
-    SELECT 1 FROM organization_responsible 
-    WHERE organization_id = (SELECT organization_id FROM organization_id_t)
-    AND user_id = (SELECT id FROM user_id_t));`, username, tenderId)
-
-	if err != nil {
-		return false, errors.WithMessage(err, "Repository.Tender.UserBelongsToTenderOrgByUsername with id: "+tenderId)
-	}
-
-	return belongs, nil
-}
-
-func (rep *TenderRep) UserIdBelongsToTenderOrg(ctx context.Context, userId, tenderId string) (bool, error) {
-	if !rep.idsCache.Exists(tenderId) {
-		return false, domain.ErrTenderDoesNotExist
-	}
-
-	var belongs bool
-	err := rep.cli.SelectRow(ctx, &belongs,
-		`SELECT EXISTS (
-    organization_id_t AS (
+    WITH organization_id_t AS (
     	SELECT organization_id FROM tender WHERE id = $1
     )
     SELECT 1 FROM organization_responsible 
@@ -270,7 +269,7 @@ func (rep *TenderRep) UserIdBelongsToTenderOrg(ctx context.Context, userId, tend
     AND user_id = $2);`, tenderId, userId)
 
 	if err != nil {
-		return false, errors.WithMessage(err, "Repository.Tender.UserIdBelongsToTenderOrg with id: "+tenderId)
+		return false, errors.WithMessage(err, "Repository.Tender.UsernameBelongsToTenderOrg with id: "+tenderId)
 	}
 
 	return belongs, nil

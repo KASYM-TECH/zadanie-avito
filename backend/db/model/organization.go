@@ -11,7 +11,7 @@ const (
 )
 
 type Organization struct {
-	ID          string           `db:"id"`
+	Id          string           `db:"id"`
 	Name        string           `db:"name"`
 	Description string           `db:"description"`
 	Type        OrganizationType `db:"type"`
@@ -20,7 +20,7 @@ type Organization struct {
 }
 
 type OrganizationResponsible struct {
-	ID             string
-	OrganizationID string
-	UserID         string
+	Id             string
+	OrganizationId string
+	UserId         string
 }

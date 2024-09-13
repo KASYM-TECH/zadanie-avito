@@ -7,28 +7,23 @@ import (
 	"avito/log"
 	"avito/repository/cache"
 	"context"
-	"fmt"
 	"github.com/pkg/errors"
 )
 
 type BidRep struct {
-	cli      db.DB
-	logger   log.Logger
-	idsCache *cache.Set
+	cli                  db.DB
+	logger               log.Logger
+	idsCache             *cache.Set
+	usernameIdMatchCache *cache.Storage
 }
 
-func NewBidRep(logger log.Logger, cli db.DB, idsCache *cache.Set) *BidRep {
+func NewBidRep(logger log.Logger, cli db.DB, idsCache *cache.Set, usernameIdMatchCache *cache.Storage) *BidRep {
 	bidRep := &BidRep{
-		logger:   logger,
-		cli:      cli,
-		idsCache: idsCache,
+		logger:               logger,
+		cli:                  cli,
+		idsCache:             idsCache,
+		usernameIdMatchCache: usernameIdMatchCache,
 	}
-	ctx := context.Background()
-	ids, err := bidRep.GetBidIds(ctx)
-	if err != nil {
-		logger.Error(ctx, fmt.Sprintf("Get bid ids error: %v", err))
-	}
-	idsCache.WarmUp(ids)
 
 	return bidRep
 }
@@ -39,7 +34,7 @@ func (rep *BidRep) Insert(ctx context.Context, newBid *model.Bid) (string, error
 		`WITH bid_id_t AS (INSERT INTO bid (tender_id, author_type, author_id) VALUES ($1, $2, $3) RETURNING id)
 			   INSERT INTO bid_content(name, description, bid_id) VALUES ($4, $5, (SELECT id FROM bid_id_t)) 
                RETURNING (SELECT id FROM bid_id_t)`,
-		newBid.TenderID, newBid.AuthorType, newBid.AuthorID,
+		newBid.TenderId, newBid.AuthorType, newBid.AuthorId,
 		newBid.Name, newBid.Description)
 
 	if err != nil {
@@ -68,7 +63,11 @@ func (rep *BidRep) GetById(ctx context.Context, bidId string) (*model.Bid, error
 	return &bid, nil
 }
 
-func (rep *BidRep) GetByUserId(ctx context.Context, offset, limit int, userId string) ([]model.Bid, error) {
+func (rep *BidRep) GetByUsername(ctx context.Context, offset, limit int, username string) ([]model.Bid, error) {
+	userId, found := rep.usernameIdMatchCache.Get(username)
+	if !found {
+		return nil, domain.ErrUserWithNameNotFound
+	}
 	query := `SELECT b.id,
 			c.name,
 			b.status,
@@ -102,7 +101,7 @@ func (rep *BidRep) GetByUserId(ctx context.Context, offset, limit int, userId st
 	return bid, nil
 }
 
-func (rep *BidRep) GetByTenderId(ctx context.Context, offset, limit int, tenderId string) ([]model.Bid, error) {
+func (rep *BidRep) GetVisibleByTenderId(ctx context.Context, offset, limit int, tenderId string) ([]model.Bid, error) {
 	query := `SELECT b.id,
 			c.name,
 			b.status,
@@ -167,7 +166,7 @@ func (rep *BidRep) SetBidStatusById(ctx context.Context, bidId, status string) e
 }
 
 func (rep *BidRep) UpdateById(ctx context.Context, bid *model.Bid) error {
-	if !rep.idsCache.Exists(bid.ID) {
+	if !rep.idsCache.Exists(bid.Id) {
 		return domain.ErrBidDoesNotExist
 	}
 
@@ -176,10 +175,10 @@ func (rep *BidRep) UpdateById(ctx context.Context, bid *model.Bid) error {
 					INSERT INTO bid_content(name, description, version, bid_id) 
 					VALUES($1, $2, (SELECT MAX(version) FROM bid_content WHERE bid_id = $3)+1, $3) RETURNING version)
 			UPDATE bid SET version=(SELECT version FROM version_t) WHERE id = $3`,
-		bid.Name, bid.Description, bid.ID)
+		bid.Name, bid.Description, bid.Id)
 
 	if err != nil {
-		return errors.WithMessage(err, "Repository.Bid.UpdateById with id: "+bid.ID)
+		return errors.WithMessage(err, "Repository.Bid.UpdateById with id: "+bid.Id)
 	}
 
 	return nil
@@ -284,4 +283,13 @@ func (rep *BidRep) GetBidIds(ctx context.Context) ([]string, error) {
 	}
 
 	return ids, nil
+}
+
+func (rep *BidRep) GetUserIdByName(ctx context.Context, username string) (string, error) {
+	userId, found := rep.usernameIdMatchCache.Get(username)
+	if !found {
+		return "", domain.ErrUserWithNameNotFound
+	}
+
+	return userId, nil
 }

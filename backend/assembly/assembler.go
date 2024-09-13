@@ -58,28 +58,48 @@ func (a *Assembler) Assemble(ctx context.Context, conf *config.Config) (http.Han
 	}
 
 	var (
-		bidIdStorage    = cache.NewSet()
-		tenderIdStorage = cache.NewSet()
-		txManager       = transaction.NewManager(cli, a.logger, bidIdStorage, tenderIdStorage)
+		bidIdStorage           = cache.NewSet()
+		tenderIdStorage        = cache.NewSet()
+		usernameIdMatchStorage = cache.NewStorage()
+		txManager              = transaction.NewManager(cli, a.logger, bidIdStorage, tenderIdStorage, usernameIdMatchStorage)
 	)
+
 	dummyController := controllers.NewDummyController(a.logger)
 
-	orgRep := repository.NewOrganizationRep(a.logger, cli)
+	orgRep := repository.NewOrganizationRep(a.logger, cli, usernameIdMatchStorage)
 	orgService := service.NewOrganizationService(orgRep)
 	orgController := controllers.NewOrganizationController(a.logger, orgService)
 
-	userRep := repository.NewUserRep(a.logger, cli)
+	userRep := repository.NewUserRep(a.logger, cli, usernameIdMatchStorage)
 	userService := service.NewUserService(userRep)
 	userController := controllers.NewUserController(a.logger, userService)
 
-	tenderRep := repository.NewTenderRep(a.logger, cli, tenderIdStorage)
+	tenderRep := repository.NewTenderRep(a.logger, cli, tenderIdStorage, usernameIdMatchStorage)
 	tenderService := service.NewTenderService(tenderRep, orgRep)
 	tenderController := controllers.NewTenderController(a.logger, tenderService)
 
-	bidRep := repository.NewBidRep(a.logger, cli, bidIdStorage)
-	feedbackRep := repository.NewFeedbackRep(a.logger, cli)
+	bidRep := repository.NewBidRep(a.logger, cli, bidIdStorage, usernameIdMatchStorage)
+	feedbackRep := repository.NewFeedbackRep(a.logger, cli, usernameIdMatchStorage)
 	bidService := service.NewBidService(bidRep, feedbackRep, tenderRep, orgRep, txManager)
 	bidController := controllers.NewBidController(a.logger, bidService)
+
+	ids, err := bidRep.GetBidIds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bidIdStorage.WarmUp(ids)
+
+	ids, err = tenderRep.GetTenderIds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tenderIdStorage.WarmUp(ids)
+
+	kvPairs, err := userRep.LoadUsernameId(ctx)
+	if err != nil {
+		return nil, err
+	}
+	usernameIdMatchStorage.WarmUp(kvPairs)
 
 	r := server.NewRouter(a.logger)
 	middlewares := server.NewMiddleware(a.logger)

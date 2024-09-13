@@ -7,14 +7,13 @@ import (
 	"github.com/txix-open/isp-kit/http/httpcli"
 )
 
-func SetBidStatus(test *Test, token, bidId, username string, status model.BidStatus) (domain.SetStatusBidResp, *httpcli.Response) {
+func SetBidStatus(test *Test, bidId, username string, status model.BidStatus) (domain.SetStatusBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var bidResp domain.SetStatusBidResp
-	resp, err := test.Cli.Put(test.URL+"/api/bids/"+bidId+"/status").
+	resp, err := test.Cli.Put(test.URL + "/api/bids/" + bidId + "/status").
 		QueryParams(map[string]any{"username": username, "status": status}).
 		JsonResponseBody(&bidResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -22,14 +21,13 @@ func SetBidStatus(test *Test, token, bidId, username string, status model.BidSta
 	return bidResp, resp
 }
 
-func CreateBid(test *Test, token string, bidReq domain.CreateBidReq) (domain.CreateBidResp, *httpcli.Response) {
+func CreateBid(test *Test, bidReq domain.CreateBidReq) (domain.CreateBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var bid domain.CreateBidResp
-	resp, err := test.Cli.Post(test.URL+"/api/bids/new").
+	resp, err := test.Cli.Post(test.URL + "/api/bids/new").
 		JsonRequestBody(&bidReq).
 		JsonResponseBody(&bid).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -37,14 +35,13 @@ func CreateBid(test *Test, token string, bidReq domain.CreateBidReq) (domain.Cre
 	return bid, resp
 }
 
-func GetBidByUsername(test *Test, token, username string, offset, limit int) ([]domain.GetBidResp, *httpcli.Response) {
+func GetBidByUsername(test *Test, username string, offset, limit int) ([]domain.GetBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var bidsResp []domain.GetBidResp
-	resp, err := test.Cli.Get(test.URL+"/api/bids/my").
+	resp, err := test.Cli.Get(test.URL + "/api/bids/my").
 		QueryParams(map[string]any{"username": username, "offset": offset, "limit": limit}).
 		JsonResponseBody(&bidsResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -52,15 +49,14 @@ func GetBidByUsername(test *Test, token, username string, offset, limit int) ([]
 	return bidsResp, resp
 }
 
-func EditBid(test *Test, token, bidId, username string, req domain.EditBidReq) (domain.EditBidResp, *httpcli.Response) {
+func EditBid(test *Test, bidId, username string, req domain.EditBidReq) (domain.EditBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var tenderBidResp domain.EditBidResp
-	resp, err := test.Cli.Patch(test.URL+"/api/bids/"+bidId+"/edit").
+	resp, err := test.Cli.Patch(test.URL + "/api/bids/" + bidId + "/edit").
 		JsonRequestBody(req).
 		QueryParams(map[string]any{"username": username}).
 		JsonResponseBody(&tenderBidResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -68,14 +64,13 @@ func EditBid(test *Test, token, bidId, username string, req domain.EditBidReq) (
 	return tenderBidResp, resp
 }
 
-func RollbackBid(test *Test, token, bidId, username, version string) (domain.RollbackTenderResp, *httpcli.Response) {
+func RollbackBid(test *Test, bidId, username, version string) (domain.RollbackTenderResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var rollbackResp domain.RollbackTenderResp
-	resp, err := test.Cli.Put(test.URL+"/api/bids/"+bidId+"/rollback/"+version).
+	resp, err := test.Cli.Put(test.URL + "/api/bids/" + bidId + "/rollback/" + version).
 		QueryParams(map[string]any{"username": username}).
 		JsonResponseBody(&rollbackResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -83,14 +78,13 @@ func RollbackBid(test *Test, token, bidId, username, version string) (domain.Rol
 	return rollbackResp, resp
 }
 
-func SubmitDecisionBid(test *Test, token, bidId, username, decision string) (domain.SubmitDecisionBidResp, *httpcli.Response) {
+func SubmitDecisionBid(test *Test, bidId, username, decision string) (domain.SubmitDecisionBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var submitDecisionResp domain.SubmitDecisionBidResp
-	resp, err := test.Cli.Put(test.URL+"/api/bids/"+bidId+"/submit_decision").
+	resp, err := test.Cli.Put(test.URL + "/api/bids/" + bidId + "/submit_decision").
 		QueryParams(map[string]any{"username": username, "decision": decision}).
 		JsonResponseBody(&submitDecisionResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -98,14 +92,13 @@ func SubmitDecisionBid(test *Test, token, bidId, username, decision string) (dom
 	return submitDecisionResp, resp
 }
 
-func SubmitFeedbackBid(test *Test, token, bidId, username, feedback string) (domain.FeedbackBidResp, *httpcli.Response) {
+func SubmitFeedbackBid(test *Test, bidId, username, feedback string) (domain.FeedbackBidResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var feedbackBidResp domain.FeedbackBidResp
-	resp, err := test.Cli.Put(test.URL+"/api/bids/"+bidId+"/feedback").
+	resp, err := test.Cli.Put(test.URL + "/api/bids/" + bidId + "/feedback").
 		QueryParams(map[string]any{"username": username, "feedback": feedback}).
 		JsonResponseBody(&feedbackBidResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -113,17 +106,16 @@ func SubmitFeedbackBid(test *Test, token, bidId, username, feedback string) (dom
 	return feedbackBidResp, resp
 }
 
-func ReviewBid(test *Test, token, tenderId, authorUsername, requesterUsername string, offset, limit int) ([]domain.ReviewResp, *httpcli.Response) {
+func ReviewBid(test *Test, tenderId, authorUsername, requesterUsername string, offset, limit int) ([]domain.ReviewResp, *httpcli.Response) {
 	assert := test.Assertions
 
 	var reviewResp []domain.ReviewResp
-	resp, err := test.Cli.Get(test.URL+"/api/bids/"+tenderId+"/reviews").
+	resp, err := test.Cli.Get(test.URL + "/api/bids/" + tenderId + "/reviews").
 		QueryParams(map[string]any{"limit": limit,
 			"offset":            offset,
 			"authorUsername":    authorUsername,
 			"requesterUsername": requesterUsername}).
 		JsonResponseBody(&reviewResp).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)

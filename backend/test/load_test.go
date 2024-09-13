@@ -21,13 +21,13 @@ func TestLoadStress(t *testing.T) {
 		Description:     "d1",
 		ServiceType:     model.TenderServiceTypeConstruction,
 		Status:          model.TenderStatusCreated,
-		OrganizationID:  martinOrg.OrgId,
+		OrganizationId:  martinOrg.OrgId,
 		CreatorUsername: martinOrg.Username,
 	}
-	tender, tenderResp := basic.CreateTender(test, martinOrg.Token, tenderReq)
+	tender, tenderResp := basic.CreateTender(test, tenderReq)
 	test.Assertions.Equal(http.StatusOK, tenderResp.StatusCode())
 
-	tenders, myResp := basic.GetTenderByUsername(test, martinOrg.Token, martinOrg.Username, 0, 3)
+	tenders, myResp := basic.GetTenderByUsername(test, martinOrg.Username, 0, 3)
 	test.Assertions.Equal(http.StatusOK, myResp.StatusCode())
 	test.Assertions.Len(tenders, 1)
 
@@ -35,10 +35,7 @@ func TestLoadStress(t *testing.T) {
 	duration := 4 * time.Second
 	pinpointer := vegeta.NewStaticTargeter(vegeta.Target{
 		Method: "GET",
-		Header: map[string][]string{
-			"Authorization": {martinOrg.Token},
-		},
-		URL: test.URL + "/api/tenders/" + tender.Id + "/status",
+		URL:    test.URL + "/api/tenders/" + tender.Id + "/status",
 	})
 	attacker := vegeta.NewAttacker()
 

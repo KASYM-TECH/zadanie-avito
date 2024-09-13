@@ -46,10 +46,10 @@ linters-settings:
     max-complexity: 15 #по умолчанию 10 мало
   revive:
     rules:
-      - name: var-naming #отключаем Id -> ID
+      - name: var-naming #отключаем Id -> Id
         disabled: true
   stylecheck:
-    checks: #отключаем Id -> ID
+    checks: #отключаем Id -> Id
       - "-ST1000"
       - "-ST1016"
       - "-ST1020"

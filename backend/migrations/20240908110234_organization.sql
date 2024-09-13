@@ -6,7 +6,7 @@ CREATE TYPE organization_type AS ENUM (
 );
 
 CREATE TABLE IF NOT EXISTS organization (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUId PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
     description TEXT,
     type organization_type,
@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS organization (
 );
 
 CREATE TABLE IF NOT EXISTS organization_responsible (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    organization_id UUID REFERENCES organization(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES employee(id) ON DELETE CASCADE
+    id UUId PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUId REFERENCES organization(id) ON DELETE CASCADE,
+    user_id UUId REFERENCES employee(id) ON DELETE CASCADE
 );
 
 -- +goose Down

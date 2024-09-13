@@ -2,26 +2,24 @@
 package controllers
 
 import (
-	"avito/db/model"
 	"avito/domain"
 	"avito/log"
 	"context"
-	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"strconv"
 )
 
 type BidService interface {
-	Create(ctx context.Context, tender *model.Bid) (*model.Bid, error)
-	GetByUserId(ctx context.Context, offset, limit int, userId string) ([]model.Bid, error)
-	GetByTenderId(ctx context.Context, offset, limit int, tenderId string) ([]model.Bid, error)
+	Create(ctx context.Context, tender *domain.CreateBidReq) (*domain.CreateBidResp, error)
+	GetByUsername(ctx context.Context, offset, limit int, username string) ([]domain.GetBidResp, error)
+	GetByTenderId(ctx context.Context, offset, limit int, tenderId string) ([]domain.GetBidResp, error)
 	GetStatus(ctx context.Context, bidId, username string) (string, error)
-	SetStatus(ctx context.Context, bidId, username, status string) (*model.Bid, error)
-	Edit(ctx context.Context, userId string, bid *model.Bid) (*model.Bid, error)
-	SubmitDecision(ctx context.Context, userId, bidId string, decision model.Decision) (*model.Bid, error)
-	SubmitFeedback(ctx context.Context, feedback *model.Feedback) (*model.Bid, error)
-	Rollback(ctx context.Context, userId, tenderId string, version int) (*model.Bid, error)
-	Reviews(ctx context.Context, requesterName, authorName, tenderId string, offset, limit int) ([]model.Feedback, error)
+	SetStatus(ctx context.Context, bidId, username, status string) (*domain.SetStatusBidResp, error)
+	Edit(ctx context.Context, username, bidId string, bid *domain.EditBidReq) (*domain.EditBidResp, error)
+	SubmitDecision(ctx context.Context, username, bidId string, decision string) (*domain.SubmitDecisionBidResp, error)
+	SubmitFeedback(ctx context.Context, content, bidId, authorUsername string) (*domain.FeedbackBidResp, error)
+	Rollback(ctx context.Context, username, tenderId string, version int) (*domain.RollbackBidResp, error)
+	Reviews(ctx context.Context, requesterName, authorName, tenderId string, offset, limit int) ([]domain.ReviewResp, error)
 }
 
 type BidController struct {
@@ -34,514 +32,372 @@ func NewBidController(log log.Logger, bidService BidService) *BidController {
 }
 
 func (b *BidController) Create(ctx context.Context, createReq domain.CreateBidReq, rd domain.RequestData) (*domain.CreateBidResp, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "tender_id", createReq.TenderID)
+	ctx = log.AddKeyVal(ctx, "tenderId", createReq.TenderId)
 	b.log.Info(ctx, "bid create handler")
 
-	bidMod := &model.Bid{
-		Name:        createReq.Name,
-		Description: createReq.Description,
-		TenderID:    createReq.TenderID,
-		AuthorType:  createReq.AuthorType,
-		AuthorID:    createReq.AuthorID,
-	}
-	bid, err := b.bidService.Create(ctx, bidMod)
+	bid, err := b.bidService.Create(ctx, &createReq)
+
 	if err == nil {
-		resp := &domain.CreateBidResp{
-			Id:          bid.ID,
-			Name:        bid.Name,
-			Description: bid.Description,
-			AuthorType:  bid.AuthorType,
-			AuthorID:    bid.AuthorID,
-			Version:     bid.Version,
-			CreatedAt:   bid.CreatedAt,
-		}
-		return resp, nil
+		return bid, nil
 	}
 
-	return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+	return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 }
 
 func (b *BidController) GetByUsername(ctx context.Context, rd domain.RequestData) ([]domain.GetBidResp, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "user_id", rd.UserId)
-	b.log.Info(ctx, "bid Get handler")
-
 	var (
-		offset, limit int
-		err           error
+		username            string
+		ok                  bool
+		offsetStr, limitStr string
+		offset, limit       int
+		err                 error
 	)
 
-	username, ok := rd.Request.URL.Query()["username"]
-	if !ok || len(username) == 0 {
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
+	ctx = log.AddKeyVal(ctx, "username", username)
+	b.log.Info(ctx, "bid GetByUsername handler")
+
+	offsetStr, _ = ExtractQuery(rd.Request, "offset", "0")
+	if offset, err = strconv.Atoi(offsetStr); err != nil && offset < 0 {
+		offset = 0
 	}
 
-	if offsetStr, ok := rd.Request.URL.Query()["offset"]; ok {
-		if offset, err = strconv.Atoi(offsetStr[0]); err != nil && offset < 0 {
-			offset = 0
-		}
+	limitStr, _ = ExtractQuery(rd.Request, "limit", "0")
+	if limit, err = strconv.Atoi(limitStr); err != nil && limit < 0 {
+		limit = 0
 	}
 
-	if limitStr, ok := rd.Request.URL.Query()["limit"]; ok {
-		if limit, err = strconv.Atoi(limitStr[0]); err != nil && limit < 0 {
-			limit = 0
-		}
-	}
-
-	bids, err := b.bidService.GetByUserId(ctx, offset, limit, rd.UserId)
-	resp := make([]domain.GetBidResp, len(bids))
-	for i := range bids {
-		resp[i] = domain.GetBidResp{
-			Id:         bids[i].ID,
-			Name:       bids[i].Name,
-			Status:     bids[i].Status,
-			AuthorType: bids[i].AuthorType,
-			AuthorID:   bids[i].AuthorID,
-			CreatedAt:  bids[i].CreatedAt,
-			Version:    bids[i].Version,
-		}
-	}
+	bids, err := b.bidService.GetByUsername(ctx, offset, limit, username)
 
 	if err == nil {
-		return resp, nil
+		return bids, nil
 	}
 
-	return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+	switch {
+	case errors.Is(err, domain.ErrUserWithNameNotFound):
+		return nil, &domain.HTTPError{Cause: err, Reason: "user was not found", Status: domain.BadRequestCode}
+	default:
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
+	}
 }
 
 func (b *BidController) GetByTenderId(ctx context.Context, rd domain.RequestData) ([]domain.GetBidResp, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "user_id", rd.UserId)
-	b.log.Info(ctx, "bid GetByTenderId handler")
+	var (
+		username, tenderId  string
+		offsetStr, limitStr string
+		offset, limit       int
+		ok                  bool
+		err                 error
+	)
 
-	tenderId, ok := mux.Vars(rd.Request)["tenderId"]
-	if !ok || len(tenderId) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "tenderId is required", Status: domain.BadRequestCode}
-	}
-
-	username, ok := rd.Request.URL.Query()["username"]
-	if !ok || len(username) == 0 {
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
+	ctx = log.AddKeyVal(ctx, "username", username)
+	b.log.Info(ctx, "bid GetByTenderId handler")
+
+	if tenderId, ok = ExtractParam(rd.Request, "tenderId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "tenderId is required", Status: domain.BadRequestCode}
 	}
 
-	var (
-		offset, limit int
-		err           error
-	)
-
-	if offsetStr, ok := rd.Request.URL.Query()["offset"]; ok {
-		if offset, err = strconv.Atoi(offsetStr[0]); err != nil && offset < 0 {
-			offset = 0
-		}
+	offsetStr, _ = ExtractQuery(rd.Request, "offset", "0")
+	if offset, err = strconv.Atoi(offsetStr); err != nil && offset < 0 {
+		offset = 0
 	}
 
-	if limitStr, ok := rd.Request.URL.Query()["limit"]; ok {
-		if limit, err = strconv.Atoi(limitStr[0]); err != nil && limit < 0 {
-			limit = 0
-		}
+	limitStr, _ = ExtractQuery(rd.Request, "limit", "0")
+	if limit, err = strconv.Atoi(limitStr); err != nil && limit < 0 {
+		limit = 0
 	}
 
 	bids, err := b.bidService.GetByTenderId(ctx, offset, limit, tenderId)
-	resp := make([]domain.GetBidResp, len(bids))
-	for i := range bids {
-		resp[i] = domain.GetBidResp{
-			Id:         bids[i].ID,
-			Name:       bids[i].Name,
-			Status:     bids[i].Status,
-			AuthorType: bids[i].AuthorType,
-			AuthorID:   bids[i].AuthorID,
-			CreatedAt:  bids[i].CreatedAt,
-			Version:    bids[i].Version,
-		}
-	}
 
 	if err == nil {
-		return resp, nil
+		return bids, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) GetStatus(ctx context.Context, rd domain.RequestData) (string, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "user_id", rd.UserId)
-	b.log.Info(ctx, "bid GetStatus handler")
+	var (
+		username, bidId string
+		ok              bool
+	)
 
-	bidId, ok := mux.Vars(rd.Request)["bidId"]
-	if !ok || len(bidId) == 0 {
-		return "", &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
-	}
-
-	username, ok := rd.Request.URL.Query()["username"]
-	if !ok || len(username) == 0 {
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return "", &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return "", &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
+	ctx = log.AddKeyVal(ctx, "username", username)
+	b.log.Info(ctx, "bid GetStatus handler")
+
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return "", &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
 	}
 
-	status, err := b.bidService.GetStatus(ctx, bidId, username[0])
+	status, err := b.bidService.GetStatus(ctx, bidId, username)
 	if err == nil {
 		return status, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return "", &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return "", &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	default:
-		return "", &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return "", &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) SetStatus(ctx context.Context, rd domain.RequestData) (*domain.SetStatusBidResp, *domain.HTTPError) {
-	ctx = log.AddKeyVal(ctx, "user_id", rd.UserId)
-	b.log.Info(ctx, "bid SetStatus handler")
+	var (
+		username, bidId, status string
+		ok                      bool
+	)
 
-	bidId, ok := mux.Vars(rd.Request)["bidId"]
-	if !ok || len(bidId) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
-	}
-
-	username, ok := rd.Request.URL.Query()["username"]
-	if !ok || len(username) == 0 {
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
+	ctx = log.AddKeyVal(ctx, "username", username)
+	b.log.Info(ctx, "bid SetStatus handler")
+
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
 	}
 
-	status, ok := rd.Request.URL.Query()["status"]
-	if !ok || len(username) == 0 {
+	if status, ok = ExtractQuery(rd.Request, "status", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "status is required query", Status: domain.BadRequestCode}
 	}
 
-	bid, err := b.bidService.SetStatus(ctx, bidId, rd.UserId, status[0])
+	bid, err := b.bidService.SetStatus(ctx, bidId, username, status)
 	if err == nil {
-		resp := &domain.SetStatusBidResp{
-			Id:         bid.ID,
-			Name:       bid.Name,
-			Status:     bid.Status,
-			AuthorType: bid.AuthorType,
-			AuthorID:   bid.AuthorID,
-			CreatedAt:  bid.CreatedAt,
-			Version:    bid.Version,
-		}
-		return resp, nil
+		return bid, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrNotBidAuthor):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the author to edit status", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you must be the author to edit status", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrForbiddenApproval):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You can not self approve", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you can not self approve", Status: domain.BadRequestCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) Edit(ctx context.Context, req domain.EditBidReq, rd domain.RequestData) (*domain.EditBidResp, *domain.HTTPError) {
-	bidId, ok := mux.Vars(rd.Request)["bidId"]
-	ctx = log.AddKeyVal(ctx, "bid_name", req.Name)
-	b.log.Info(ctx, "bid Edit handler")
+	var (
+		username, bidId string
+		ok              bool
+	)
 
-	if !ok || len(bidId) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required query", Status: domain.BadRequestCode}
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
 	}
 
-	var username []string
-	if username, ok = rd.Request.URL.Query()["username"]; !ok {
+	ctx = log.AddKeyVal(ctx, "bidId", bidId)
+	b.log.Info(ctx, "bid edit handler")
+
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
-	}
-
-	bidToUpd := &model.Bid{
-		ID:          bidId,
-		Name:        req.Name,
-		Description: req.Description,
-	}
-
-	bid, err := b.bidService.Edit(ctx, rd.UserId, bidToUpd)
+	bid, err := b.bidService.Edit(ctx, username, bidId, &req)
 	if err == nil {
-		bidDom := &domain.EditBidResp{
-			Id:         bid.ID,
-			Name:       bid.Name,
-			Status:     bid.Status,
-			AuthorType: bid.AuthorType,
-			AuthorID:   bid.AuthorID,
-			CreatedAt:  bid.CreatedAt,
-			Version:    bid.Version,
-		}
-		return bidDom, nil
+		return bid, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrNotBidAuthor):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the author to edit", Status: domain.ForbiddenCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you must be the author to edit", Status: domain.ForbiddenCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) SubmitDecision(ctx context.Context, rd domain.RequestData) (*domain.SubmitDecisionBidResp, *domain.HTTPError) {
-	bidId, _ := mux.Vars(rd.Request)["bidId"]
-	ctx = log.AddKeyVal(ctx, "bid_id", bidId)
+	var (
+		username, bidId, decisionStr string
+		ok                           bool
+	)
+
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
+	}
+
+	ctx = log.AddKeyVal(ctx, "bidId", bidId)
 	b.log.Info(ctx, "bid SubmitDecision handler")
 
-	var (
-		username []string
-		ok       bool
-	)
-	if username, ok = rd.Request.URL.Query()["username"]; !ok {
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
-	}
-
-	var decisionStr []string
-	if decisionStr, ok = rd.Request.URL.Query()["decision"]; !ok {
+	if decisionStr, ok = ExtractQuery(rd.Request, "decision", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "decision is required query", Status: domain.BadRequestCode}
 	}
 
-	decision := model.Decision(decisionStr[0])
-	if decision != model.Approved && decision != model.Rejected {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "invalid decision", Status: domain.BadRequestCode}
-	}
-
-	bid, err := b.bidService.SubmitDecision(ctx, rd.UserId, bidId, decision)
+	bid, err := b.bidService.SubmitDecision(ctx, username, bidId, decisionStr)
 	if err == nil {
-		bidDom := &domain.SubmitDecisionBidResp{
-			Id:         bid.ID,
-			Name:       bid.Name,
-			Status:     bid.Status,
-			AuthorType: bid.AuthorType,
-			AuthorID:   bid.AuthorID,
-			CreatedAt:  bid.CreatedAt,
-			Version:    bid.Version,
-		}
-		return bidDom, nil
+		return bid, nil
 	}
 
 	switch {
+	case errors.Is(err, domain.ErrInvalidDecision):
+		return nil, &domain.HTTPError{Cause: err, Reason: "decision is invalid", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrBidIsNotPublished):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid is not published", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid is not published", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrTenderIsNotPublished):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Tender is not published", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "tender is not published", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrUserNotResponsible):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be from tender's organization to submit decision",
+		return nil, &domain.HTTPError{Cause: err, Reason: "you must be from tender's organization to submit decision",
 			Status: domain.ForbiddenCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) SubmitFeedback(ctx context.Context, rd domain.RequestData) (*domain.FeedbackBidResp, *domain.HTTPError) {
-	bidId, ok := mux.Vars(rd.Request)["bidId"]
-	ctx = log.AddKeyVal(ctx, "bid_id", bidId)
-	b.log.Info(ctx, "bid Feedback handler")
+	var (
+		username, bidId, feedbackContent string
+		ok                               bool
+	)
 
-	if !ok || len(bidId) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required query", Status: domain.BadRequestCode}
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
 	}
 
-	var username []string
-	if username, ok = rd.Request.URL.Query()["username"]; !ok || len(username) == 0 {
+	ctx = log.AddKeyVal(ctx, "bidId", bidId)
+	b.log.Info(ctx, "bid SubmitFeedback handler")
+
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
 	}
 
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
-	}
-
-	var feedbackStr []string
-	if feedbackStr, ok = rd.Request.URL.Query()["feedback"]; !ok {
+	if feedbackContent, ok = ExtractQuery(rd.Request, "feedback", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "feedback is required query", Status: domain.BadRequestCode}
 	}
 
-	feedback := &model.Feedback{
-		Content:  feedbackStr[0],
-		BidID:    bidId,
-		AuthorID: rd.UserId,
-	}
-	bid, err := b.bidService.SubmitFeedback(ctx, feedback)
+	bid, err := b.bidService.SubmitFeedback(ctx, feedbackContent, bidId, username)
 	if err == nil {
-		bidDom := &domain.FeedbackBidResp{
-			Id:         bid.ID,
-			Name:       bid.Name,
-			Status:     bid.Status,
-			AuthorType: bid.AuthorType,
-			AuthorID:   bid.AuthorID,
-			CreatedAt:  bid.CreatedAt,
-			Version:    bid.Version,
-		}
-		return bidDom, nil
+		return bid, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrUserNotResponsible):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You are not responsible for tender organization", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you are not responsible for tender organization", Status: domain.BadRequestCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) Rollback(ctx context.Context, rd domain.RequestData) (*domain.RollbackBidResp, *domain.HTTPError) {
+	var (
+		username, bidId, versionStr string
+		ok                          bool
+		version                     int
+		err                         error
+	)
+
+	if bidId, ok = ExtractParam(rd.Request, "bidId", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required", Status: domain.BadRequestCode}
+	}
+
+	ctx = log.AddKeyVal(ctx, "bidId", bidId)
 	b.log.Info(ctx, "tender Rollback handler")
 
-	bidId, ok := mux.Vars(rd.Request)["bidId"]
-	if !ok || len(bidId) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "bidId is required query", Status: domain.BadRequestCode}
-	}
-	versionStr, ok := mux.Vars(rd.Request)["version"]
-	if !ok || len(versionStr) == 0 {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "version is required query", Status: domain.BadRequestCode}
+	if versionStr, ok = ExtractParam(rd.Request, "version", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "version is required", Status: domain.BadRequestCode}
 	}
 
-	var username []string
-	if username, ok = rd.Request.URL.Query()["username"]; !ok {
-		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
-	}
-
-	if rd.Claims.Username != username[0] {
-		return nil, &domain.HTTPError{
-			Cause:  domain.ErrClient,
-			Reason: "username does not match with token's username",
-			Status: domain.UnauthorizedCode}
-	}
-
-	var (
-		version int
-		err     error
-	)
 	if version, err = strconv.Atoi(versionStr); err != nil || version < 1 {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "version must be positive integer", Status: domain.BadRequestCode}
 	}
 
-	bid, err := b.bidService.Rollback(ctx, rd.UserId, bidId, version)
+	if username, ok = ExtractQuery(rd.Request, "username", ""); !ok {
+		return nil, &domain.HTTPError{Cause: nil, Reason: "username is required query", Status: domain.BadRequestCode}
+	}
+
+	bid, err := b.bidService.Rollback(ctx, username, bidId, version)
 	if err == nil {
-		resp := &domain.RollbackBidResp{
-			Id:         bid.ID,
-			Name:       bid.Name,
-			Status:     bid.Status,
-			AuthorType: bid.AuthorType,
-			AuthorID:   bid.AuthorID,
-			CreatedAt:  bid.CreatedAt,
-			Version:    bid.Version,
-		}
-		return resp, nil
+		return bid, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrNotBidAuthor):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You must be the bid author to roll it back", Status: domain.ForbiddenCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you must be the bid author to roll it back", Status: domain.ForbiddenCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }
 
 func (b *BidController) Reviews(ctx context.Context, rd domain.RequestData) ([]domain.ReviewResp, *domain.HTTPError) {
-	b.log.Info(ctx, "tender Reviews handler")
+	var (
+		ok                  bool
+		tenderId            string
+		authorUsername      string
+		requesterUsername   string
+		offsetStr, limitStr string
+		offset, limit       int
+		err                 error
+	)
 
-	tenderId, ok := mux.Vars(rd.Request)["tenderId"]
-	if !ok || len(tenderId) == 0 {
+	if tenderId, ok = ExtractParam(rd.Request, "tenderId", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "tenderId is required", Status: domain.BadRequestCode}
 	}
 
-	var authorUsername []string
-	if authorUsername, ok = rd.Request.URL.Query()["authorUsername"]; !ok {
+	ctx = log.AddKeyVal(ctx, "tenderId", tenderId)
+	b.log.Info(ctx, "tender Reviews handler")
+
+	if authorUsername, ok = ExtractQuery(rd.Request, "authorUsername", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "authorUsername is required query", Status: domain.BadRequestCode}
 	}
 
-	var requesterUsername []string
-	if requesterUsername, ok = rd.Request.URL.Query()["requesterUsername"]; !ok {
+	if requesterUsername, ok = ExtractQuery(rd.Request, "requesterUsername", ""); !ok {
 		return nil, &domain.HTTPError{Cause: nil, Reason: "requesterUsername is required query", Status: domain.BadRequestCode}
 	}
 
-	var (
-		offset, limit int
-		err           error
-	)
-
-	if offsetStr, ok := rd.Request.URL.Query()["offset"]; ok {
-		if offset, err = strconv.Atoi(offsetStr[0]); err != nil && offset < 0 {
-			offset = 0
-		}
+	offsetStr, _ = ExtractQuery(rd.Request, "offset", "0")
+	if offset, err = strconv.Atoi(offsetStr); err != nil && offset < 0 {
+		offset = 0
 	}
 
-	if limitStr, ok := rd.Request.URL.Query()["limit"]; ok {
-		if limit, err = strconv.Atoi(limitStr[0]); err != nil && limit < 0 {
-			limit = 0
-		}
+	limitStr, _ = ExtractQuery(rd.Request, "limit", "0")
+	if limit, err = strconv.Atoi(limitStr); err != nil && limit < 0 {
+		limit = 0
 	}
 
-	reviews, err := b.bidService.Reviews(ctx, requesterUsername[0], authorUsername[0], tenderId, offset, limit)
+	reviews, err := b.bidService.Reviews(ctx, requesterUsername, authorUsername, tenderId, offset, limit)
 	if err == nil {
-		resp := make([]domain.ReviewResp, len(reviews))
-		for i := range reviews {
-			resp[i] = domain.ReviewResp{
-				Id:          reviews[i].ID,
-				Description: reviews[i].Content,
-				CreatedAt:   reviews[i].CreatedAt,
-			}
-		}
-		return resp, nil
+		return reviews, nil
 	}
 
 	switch {
 	case errors.Is(err, domain.ErrBidDoesNotExist):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Bid with this id does not exist", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "bid with this id does not exist", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrAuthorIsIncorrect):
-		return nil, &domain.HTTPError{Cause: err, Reason: "Specified author is not the author of the tender", Status: domain.BadRequestCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "specified author is not the author of the tender", Status: domain.BadRequestCode}
 	case errors.Is(err, domain.ErrUserNotResponsible):
-		return nil, &domain.HTTPError{Cause: err, Reason: "You are not responsible for tender organization", Status: domain.ForbiddenCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "you are not responsible for tender organization", Status: domain.ForbiddenCode}
 	default:
-		return nil, &domain.HTTPError{Cause: err, Reason: "server unavailable", Status: domain.ServerFailureCode}
+		return nil, &domain.HTTPError{Cause: err, Reason: "server error", Status: domain.ServerFailureCode}
 	}
 }

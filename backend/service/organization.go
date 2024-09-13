@@ -9,6 +9,7 @@ import (
 type OrganizationRep interface {
 	Insert(ctx context.Context, org *model.Organization) (string, error)
 	MakeResponsible(ctx context.Context, empId, orgId string) (string, error)
+	EmpBelongs(ctx context.Context, employeeUsername, orgId string) (bool, error)
 }
 
 type OrganizationService struct {

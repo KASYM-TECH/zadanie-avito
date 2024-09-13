@@ -9,7 +9,6 @@ import (
 )
 
 type EmployeeOrg struct {
-	Token      string
 	OrgId      string
 	EmployeeId string
 	Username   string
@@ -23,24 +22,20 @@ func CreateOrgEmployee(test *Test, username string) EmployeeOrg {
 	})
 	test.Assertions.Equal(http.StatusOK, userResp.StatusCode())
 
-	tokens, loginResp := LoginUser(test, username)
-	test.Assertions.Equal(http.StatusOK, loginResp.StatusCode())
-
-	orgId, orgResp := CreateOrganization(test, tokens.AccessToken)
+	orgId, orgResp := CreateOrganization(test)
 	test.Assertions.Equal(http.StatusOK, orgResp.StatusCode())
 
-	_, bondResp := Bond(test, userId, orgId, tokens.AccessToken)
+	_, bondResp := Bond(test, userId, orgId)
 	test.Assertions.Equal(http.StatusOK, bondResp.StatusCode())
 
 	return EmployeeOrg{
 		EmployeeId: userId,
 		Username:   username,
 		OrgId:      orgId,
-		Token:      tokens.AccessToken,
 	}
 }
 
-func Bond(test *Test, userId, orgId, token string) (string, *httpcli.Response) {
+func Bond(test *Test, userId, orgId string) (string, *httpcli.Response) {
 	assert := test.Assertions
 
 	req := domain.BondReq{
@@ -49,10 +44,9 @@ func Bond(test *Test, userId, orgId, token string) (string, *httpcli.Response) {
 	}
 
 	var bondId string
-	resp, err := test.Cli.Post(test.URL+"/api/organizations/bond").
+	resp, err := test.Cli.Post(test.URL + "/api/organizations/bond").
 		JsonRequestBody(&req).
 		JsonResponseBody(&bondId).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)
@@ -74,25 +68,7 @@ func CreateUser(test *Test, req domain.SignupRequest) (string, *httpcli.Response
 	return userId, resp
 }
 
-func LoginUser(test *Test, username string) (domain.LoginResponse, *httpcli.Response) {
-	assert := test.Assertions
-
-	req := domain.LoginRequest{
-		Username: username,
-	}
-
-	var tokens domain.LoginResponse
-	resp, err := test.Cli.Post(test.URL + "/api/auth/login").
-		JsonRequestBody(&req).
-		JsonResponseBody(&tokens).
-		Do(context.Background())
-
-	assert.NoError(err)
-
-	return tokens, resp
-}
-
-func CreateOrganization(test *Test, token string) (string, *httpcli.Response) {
+func CreateOrganization(test *Test) (string, *httpcli.Response) {
 	assert := test.Assertions
 
 	req := domain.CreateOrganizationReq{
@@ -102,10 +78,9 @@ func CreateOrganization(test *Test, token string) (string, *httpcli.Response) {
 	}
 
 	var userId string
-	resp, err := test.Cli.Post(test.URL+"/api/organizations/new").
+	resp, err := test.Cli.Post(test.URL + "/api/organizations/new").
 		JsonRequestBody(&req).
 		JsonResponseBody(&userId).
-		Header("Authorization", token).
 		Do(context.Background())
 
 	assert.NoError(err)

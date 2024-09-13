@@ -19,18 +19,18 @@ type Test struct {
 	Server     *httptest.Server
 	Cli        *httpcli.Client
 	DbCli      db.DB
-	TestID     uint32
+	TestId     uint32
 	URL        string
 }
 
 func InitTest(t *testing.T) *Test {
 	var (
-		testID = rand.Uint32()
+		testId = rand.Uint32()
 	)
 	assert := require.New(t)
 	ctx := context.Background()
 
-	cfg := ConfigDefault().WithSchema("test_" + strconv.Itoa(int(testID)))
+	cfg := ConfigDefault().WithSchema("test_" + strconv.Itoa(int(testId)))
 	_, err := cfg.Validate(ctx)
 	assert.NoError(err)
 
@@ -55,7 +55,7 @@ func InitTest(t *testing.T) *Test {
 		Assertions: assert,
 		Server:     srv,
 		DbCli:      dbCli,
-		TestID:     rand.Uint32(),
+		TestId:     rand.Uint32(),
 		URL:        srv.URL,
 		Cli:        httpcli.New(),
 	}

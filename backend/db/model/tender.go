@@ -20,12 +20,12 @@ const (
 )
 
 type Tender struct {
-	ID             string            `db:"id"`
+	Id             string            `db:"id"`
 	Name           string            `db:"name"`
 	Description    string            `db:"description"`
 	ServiceType    TenderServiceType `db:"service_type"`
 	Status         TenderStatus      `db:"status"`
-	OrganizationID string            `db:"organization_id"`
+	OrganizationId string            `db:"organization_id"`
 	Version        int               `db:"version"`
 	CreatedAt      time.Time         `db:"created_at"`
 	UserId         string            `db:"user_id"`

@@ -10,7 +10,7 @@ type CreateTenderReq struct {
 	Description     string                  `validate:"required,lte=500" json:"description"`
 	ServiceType     model.TenderServiceType `json:"serviceType"`
 	Status          model.TenderStatus      `json:"status"`
-	OrganizationID  string                  `validate:"required,lte=100" json:"organizationId"`
+	OrganizationId  string                  `validate:"required,lte=100" json:"organizationId"`
 	CreatorUsername string                  `json:"creatorUsername"`
 }
 

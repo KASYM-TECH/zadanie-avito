@@ -30,13 +30,13 @@ var (
 )
 
 type Bid struct {
-	ID          string        `db:"id"`
+	Id          string        `db:"id"`
 	Name        string        `db:"name"`
 	Description string        `db:"description"`
 	Status      BidStatus     `db:"status"`
-	TenderID    string        `db:"tender_id"`
+	TenderId    string        `db:"tender_id"`
 	AuthorType  BidAuthorType `db:"author_type"`
-	AuthorID    string        `db:"author_id"`
+	AuthorId    string        `db:"author_id"`
 	Version     int           `db:"version"`
 	CreatedAt   time.Time     `db:"created_at"`
 }

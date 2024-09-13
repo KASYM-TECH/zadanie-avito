@@ -2,8 +2,6 @@
 package server
 
 import (
-	"avito/auth"
-	"avito/auth/jwt"
 	"avito/domain"
 	"avito/log"
 	"avito/utils"
@@ -11,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strings"
 )
 
 type Middleware struct {
@@ -19,7 +16,6 @@ type Middleware struct {
 }
 
 type BodyKey struct{}
-type AuthKey struct{}
 
 func NewMiddleware(logger log.Logger) *Middleware {
 	return &Middleware{
@@ -29,10 +25,6 @@ func NewMiddleware(logger log.Logger) *Middleware {
 
 func (md *Middleware) Wrap(endpointFunc any) http.HandlerFunc {
 	return md.HandleResponse(md.HandleLogging(md.HandleCalling(endpointFunc)))
-}
-
-func (md *Middleware) WrapAuthed(endpointFunc any) http.HandlerFunc {
-	return md.HandleResponse(md.HandleLogging(md.HandleAuth(md.HandleCalling(endpointFunc))))
 }
 
 func (md *Middleware) HandleResponse(handler http.HandlerFunc) http.HandlerFunc {
@@ -65,25 +57,6 @@ func (md *Middleware) HandleLogging(handler http.HandlerFunc) http.HandlerFunc {
 		}
 		warnMsg := fmt.Sprintf("\n%s \n[Method] %s URL: %s ", err.String(), r.Method, r.URL)
 		md.logger.Warn(r.Context(), warnMsg)
-	}
-}
-
-func (md *Middleware) HandleAuth(handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := strings.TrimSpace(r.Header.Get("Authorization"))
-		token, _ = strings.CutPrefix(token, "bearer ")
-
-		claims, err := jwt.ParseToken(token)
-		if err != nil {
-			domErr := domain.NewHTTPError(err, "could not authenticate: "+err.Error(), domain.UnauthorizedCode)
-			domain.SetError(r, domErr)
-			return
-		}
-
-		claimsCtx := context.WithValue(r.Context(), AuthKey{}, *claims)
-		*r = *r.WithContext(claimsCtx)
-
-		handler(w, r)
 	}
 }
 
@@ -128,13 +101,6 @@ func (md *Middleware) HandleCalling(endpointFunc any) http.HandlerFunc {
 		}
 
 		requestData := domain.RequestData{Request: r}
-		if claims := r.Context().Value(AuthKey{}); claims != nil {
-			var ok bool
-			if requestData.Claims, ok = claims.(auth.Claims); !ok {
-				return
-			}
-			requestData.UserId = requestData.Claims.Subject
-		}
 		argsIn = append(argsIn, reflect.ValueOf(requestData))
 
 		argsOut = funcValue.Call(argsIn)

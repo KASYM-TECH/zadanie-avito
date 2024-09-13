@@ -8,9 +8,9 @@ import (
 type CreateBidReq struct {
 	Name        string              `validate:"required,lte=100" json:"name"`
 	Description string              `validate:"required,lte=500" json:"description"`
-	TenderID    string              `validate:"required" json:"tenderId"`
+	TenderId    string              `validate:"required" json:"tenderId"`
 	AuthorType  model.BidAuthorType `validate:"required" json:"authorType"`
-	AuthorID    string              `validate:"required" json:"authorId"`
+	AuthorId    string              `validate:"required" json:"authorId"`
 }
 
 type CreateBidResp struct {
@@ -18,7 +18,7 @@ type CreateBidResp struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
 	AuthorType  model.BidAuthorType `json:"authorType"`
-	AuthorID    string              `json:"authorId"`
+	AuthorId    string              `json:"authorId"`
 	Version     int                 `json:"version"`
 	CreatedAt   time.Time           `json:"createdAt"`
 }
@@ -28,7 +28,7 @@ type GetBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
@@ -38,7 +38,7 @@ type SetStatusBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
@@ -53,7 +53,7 @@ type EditBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
@@ -63,7 +63,7 @@ type SubmitDecisionBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
@@ -73,7 +73,7 @@ type FeedbackBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
@@ -83,7 +83,7 @@ type RollbackBidResp struct {
 	Name       string              `json:"name"`
 	Status     model.BidStatus     `json:"status"`
 	AuthorType model.BidAuthorType `json:"authorType"`
-	AuthorID   string              `json:"authorId"`
+	AuthorId   string              `json:"authorId"`
 	Version    int                 `json:"version"`
 	CreatedAt  time.Time           `json:"createdAt"`
 }
